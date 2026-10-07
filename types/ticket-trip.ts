@@ -24,6 +24,12 @@ export interface AdventuresResponse {
   adventures: Adventure[];
   filters: AdventureFilters;
 }
+
+export interface AdventureCityDocument {
+  id: string;
+  adventures: Adventure[];
+}
+
 export interface AdventureDetail {
   id: string;
   name: string;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import clientPromise from "@/lib/mongodb";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,11 +12,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const database = await getDb();
+    const client = await clientPromise;
+    const db = client.db("tickettrip");
 
-    const adventure = database.data.detail.find(
-      (item) => item.id === adventureId,
-    );
+    const adventure = await db
+      .collection("details")
+      .findOne({ id: adventureId });
 
     if (!adventure) {
       return NextResponse.json(

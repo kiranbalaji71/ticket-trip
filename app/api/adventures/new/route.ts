@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { customAlphabet } from "nanoid";
 
-import { getDb } from "@/lib/db";
 import randomData from "@/data/random_data";
+import clientPromise from "@/lib/mongodb";
+import { AdventureCityDocument, AdventureDetail } from "@/types/ticket-trip";
 
 const categories = ["Beaches", "Cycling", "Hillside", "Party"];
 
@@ -27,9 +28,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const database = await getDb();
+    const client = await clientPromise;
+    const db = client.db("tickettrip");
 
-    const cityData = database.data.adventures.find((item) => item.id === city);
+    const cityData = await db.collection("adventures").findOne({
+      id: city.toLowerCase(),
+    });
 
     if (!cityData) {
       return NextResponse.json(
@@ -40,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const images = [];
+    const images: string[] = [];
 
     for (let i = 0; i < 3; i++) {
       const index = randomInteger(0, randomData.images.length - 1);
@@ -77,18 +81,45 @@ export async function POST(request: NextRequest) {
       category: categories[Math.floor(Math.random() * categories.length)],
     };
 
-    database.data.detail.push(adventureDetail);
+    // Insert adventure details
+    await db.collection<AdventureDetail>("detail").insertOne(adventureDetail);
 
-    cityData.adventures.push(adventure);
+    // Add adventure to city's adventures array
+    const result = await db
+      .collection<AdventureCityDocument>("adventures")
+      .updateOne(
+        {
+          id: city.toLowerCase(),
+        },
+        {
+          $push: {
+            adventures: adventure,
+          },
+        },
+      );
 
-    await database.write();
+    if (result.modifiedCount === 0) {
+      await db.collection("detail").deleteOne({
+        id,
+      });
 
-    return NextResponse.json({
-      success: true,
-      ...adventure,
-    });
+      return NextResponse.json(
+        {
+          message: `Failed to add adventure to ${city}`,
+        },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        adventure,
+      },
+      { status: 201 },
+    );
   } catch (error) {
-    console.error(error);
+    console.error("Failed to create adventure:", error);
 
     return NextResponse.json(
       {

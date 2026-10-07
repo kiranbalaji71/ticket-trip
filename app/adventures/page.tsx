@@ -5,9 +5,23 @@ import { fetchAdventures } from "@/lib/api";
 import type { Adventure, AdventureFilters } from "@/types/ticket-trip";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 export default function AdventuresGridPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-7xl px-4 py-20 text-center">
+          Loading adventures...
+        </div>
+      }
+    >
+      <AdventuresGridContent />
+    </Suspense>
+  );
+}
+
+function AdventuresGridContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 

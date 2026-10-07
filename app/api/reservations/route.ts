@@ -1,11 +1,14 @@
+import clientPromise from "@/lib/mongodb";
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
 
 export async function GET() {
   try {
-    const database = await getDb();
+    const client = await clientPromise;
+    const db = client.db("tickettrip");
 
-    return NextResponse.json(database.data.reservations);
+    const reservations = await db.collection("reservations").find().toArray();
+
+    return NextResponse.json(reservations);
   } catch (error) {
     console.error(error);
 

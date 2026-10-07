@@ -4,12 +4,22 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 
-import { getDb } from "@/lib/db";
+import clientPromise from "@/lib/mongodb";
+import type {
+  Adventure,
+  AdventureDetail,
+  Reservation,
+} from "@/types/ticket-trip";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const nanoid = customAlphabet("1234567890abcdef", 16);
+
+interface AdventureCityDocument {
+  id: string;
+  adventures: Adventure[];
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,13 +36,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const database = await getDb();
+    const client = await clientPromise;
+    const db = client.db("tickettrip");
 
-    const adventureDetail = database.data.detail.find(
+    const adventureDocument = await db
+      .collection<AdventureCityDocument>("adventures")
+      .findOne({
+        adventures: {
+          $elemMatch: {
+            id: adventure,
+          },
+        },
+      });
+
+    if (!adventureDocument) {
+      return NextResponse.json(
+        {
+          message: `Adventure details not found for ${adventure}!`,
+        },
+        { status: 404 },
+      );
+    }
+
+    const adventureData = adventureDocument.adventures.find(
       (item) => item.id === adventure,
     );
 
-    if (!adventureDetail) {
+    if (!adventureData) {
       return NextResponse.json(
         {
           message: `Adventure details not found for ${adventure}!`,
@@ -44,7 +74,7 @@ export async function POST(request: NextRequest) {
     const reqDate = dayjs(date);
     const currentDate = dayjs();
 
-    if (!reqDate.isAfter(currentDate)) {
+    if (!reqDate.isValid() || !reqDate.isAfter(currentDate)) {
       return NextResponse.json(
         {
           message: "Date of booking is incorrect. Can't book for a past date!",
@@ -53,36 +83,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    adventureDetail.reserved = true;
-    adventureDetail.available = false;
-
-    const formattedName = name
+    const formattedName = String(name)
       .trim()
       .toLowerCase()
-      .split(" ")
+      .split(/\s+/)
       .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
 
-    const reservation = {
+    const reservation: Reservation = {
       name: formattedName,
       date,
       person,
       adventure,
-      adventureName: adventureDetail.name,
-      price: Number(person) * adventureDetail.costPerHead,
+      adventureName: adventureData.name,
+      price: Number(person) * adventureData.costPerHead,
       id: nanoid(),
       time: dayjs().tz("Asia/Kolkata").format(),
     };
 
-    database.data.reservations.push(reservation);
+    await db.collection<Reservation>("reservations").insertOne(reservation);
 
-    await database.write();
+    await db.collection<AdventureDetail>("details").updateOne(
+      {
+        id: adventure,
+      },
+      {
+        $set: {
+          reserved: true,
+          available: false,
+        },
+      },
+    );
 
     return NextResponse.json({
       success: true,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Failed to create reservation:", error);
 
     return NextResponse.json(
       {

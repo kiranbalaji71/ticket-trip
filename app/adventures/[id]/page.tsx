@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { fetchAdventure } from "@/lib/api";
@@ -19,6 +19,8 @@ export default function AdventurePage() {
 
   const [loading, setLoading] = useState(true);
 
+  const reloadRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     async function loadAdventure() {
       try {
@@ -32,8 +34,12 @@ export default function AdventurePage() {
       }
     }
 
+    reloadRef.current = loadAdventure;
+
     loadAdventure();
   }, [id]);
+
+  const reload = useCallback(() => reloadRef.current(), [reloadRef]);
 
   if (loading) {
     return (
@@ -85,7 +91,7 @@ export default function AdventurePage() {
           </section>
 
           <aside>
-            <ReservationForm adventure={adventure} />
+            <ReservationForm adventure={adventure} onReserved={reload} />
           </aside>
         </div>
       </div>

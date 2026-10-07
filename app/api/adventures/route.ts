@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import clientPromise from "@/lib/mongodb";
+import type { AdventureCityDocument } from "@/types/ticket-trip";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,11 +17,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const database = await getDb();
+    const client = await clientPromise;
+    const db = client.db("tickettrip");
 
-    const cityData = database.data.adventures.find(
-      (item) => item.id.toLowerCase() === city.toLowerCase(),
-    );
+    const cityData = await db
+      .collection<AdventureCityDocument>("adventures")
+      .findOne({
+        id: city.toLowerCase(),
+      });
 
     if (!cityData) {
       return NextResponse.json(
@@ -31,21 +35,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const allAdventures = cityData.adventures;
+    const allAdventures = cityData.adventures ?? [];
 
     // Get unique categories
     const categories = [
       ...new Set(
         allAdventures.map((adventure) => adventure.category).filter(Boolean),
       ),
-    ];
+    ].sort();
 
     // Get unique durations
     const durations = [
       ...new Set(
-        allAdventures.map((adventure) => adventure.duration).filter(Boolean),
+        allAdventures
+          .map((adventure) => adventure.duration)
+          .filter((duration) => duration !== null && duration !== undefined),
       ),
-    ].sort((a, b) => a - b);
+    ].sort((a, b) => Number(a) - Number(b));
 
     // Apply filters
     let adventures = allAdventures;
@@ -53,7 +59,7 @@ export async function GET(request: NextRequest) {
     if (category && category !== "all") {
       adventures = adventures.filter(
         (adventure) =>
-          adventure.category.toLowerCase() === category.toLowerCase(),
+          adventure.category?.toLowerCase() === category.toLowerCase(),
       );
     }
 
@@ -71,7 +77,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error(error);
+    console.error("Failed to fetch adventures:", error);
 
     return NextResponse.json(
       { message: "Failed to fetch adventures" },
